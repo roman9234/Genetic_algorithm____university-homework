@@ -1,10 +1,12 @@
 from random import random, randint, choice
 
 from DriverA import DriverA
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Passanger:
-    max_waiting_time = 20
+    max_waiting_time = 30
 
     def __init__(self, waypint_num: int):
         self.destination = waypint_num
@@ -21,6 +23,7 @@ class Waypoint:
         self.waypoint_num = waypint_num
         self.busses_in_route = []
         self.passangers = []
+        self.resting_drivers = []
 
     def __repr__(self):
         return f"num: {self.waypoint_num}||| Psg: {self.passangers} busses: {self.busses_in_route}"
@@ -61,7 +64,9 @@ def get_random_destination(_current_waypoint):
 
 time_between_waypoints = 5
 
-money_earned_per_passanger = 50
+money_earned_per_passanger = 40
+
+money_for_bus_maintance = 7000
 
 spawned_passangers = 0
 delivered_passanders = 0
@@ -75,8 +80,9 @@ for i in range(0, last_waypoint + 1):
 
 class Hub:
     def __init__(self):
-        self.total_busses = 2
-        self.free_busses = 2
+        self.total_busses = 0
+        self.free_busses = 0
+        self.total_drivers = 0
         # timetable содержит время запуска на маршрут новых водителей
         # self.timetable = [0]
         # self.timetable = [0, 4 * 60]
@@ -90,10 +96,15 @@ class Hub:
         #                       17 * 60,
         #                       17 * 60 + 30,
         #                   ]
-        self.timetable = [i for i in range(0, 24*60, 30)]
+        self.timetable = [i for i in range(30, 24*60, 120)]
+        # self.timetable += [10]
+
 
 
 main_hub = Hub()
+spawned_passangers_events = []
+delivered_passanders_events = []
+lost_passangers_events = []
 
 
 def simulate():
@@ -107,33 +118,87 @@ def simulate():
     rush_hour = check_rush_hour(time_of_day)
     for waypoint in waypoints:
         if waypoint.waypoint_num == 0:
+
+            for resting_driver in waypoint.resting_drivers:
+                resting_driver[0] -= 1
+                if resting_driver[0] == 0:
+                    main_hub.free_busses -= 1
+                    if main_hub.free_busses < 0:
+                        main_hub.free_busses = 0
+                        main_hub.total_busses += 1
+                    new_driver = DriverA()
+                    new_driver.time_of_work = resting_driver[1]
+                    new_driver.amount_of_rests = 1
+                    waypoint.resting_drivers.remove(resting_driver)
+                    waypoint.busses_in_route.append(new_driver)
+
+
+
+
             # логика для нулевого километра
             if time_of_day in main_hub.timetable:
                 main_hub.free_busses -= 1
                 if main_hub.free_busses < 0:
-                    print("error: less than 0 busses")
+                    main_hub.free_busses = 0
+                    main_hub.total_busses += 1
+                main_hub.total_drivers+=1
                 waypoint.busses_in_route.append(DriverA())
 
         for bus in waypoint.busses_in_route:
+            bus.time_of_work += 1
             if bus.time_to_destination > 0:
                 bus.time_to_destination -= 1
             else:
-                if waypoint.waypoint_num == last_waypoint:
-                    bus.moving_to_hub = True
-                for passanger in bus.passangers:
-                    if passanger.destination == waypoint.waypoint_num:
-                        bus.passangers.remove(passanger)
-                        money_earned += money_earned_per_passanger
-                        delivered_passanders += 1
+                if waypoint.waypoint_num == 0:
 
-                for passanger in waypoint.passangers:
+                    # Проверка что водителю пора на отдых
+                    if bus.time_of_work >= bus.min_rest_interval and bus.amount_of_rests == 0:
+                        main_hub.free_busses += 1
+                        waypoint.resting_drivers.append([bus.max_rest_time, bus.time_of_work])
+                        for passanger in bus.passangers:
+                            waypoint.passangers.append(passanger)
+                        waypoint.busses_in_route.remove(bus)
+                        break
+
+                    # Проверка что водитель отработал смену
+                    elif bus.time_of_work >= bus.max_work_time:
+                        main_hub.free_busses += 1
+                        for passanger in bus.passangers:
+                            waypoint.passangers.append(passanger)
+                        waypoint.busses_in_route.remove(bus)
+                        break
+
+
+                    elif waypoint.waypoint_num == 0:
+                        bus.moving_to_hub = False
+
+
+
+                elif waypoint.waypoint_num == last_waypoint:
+                    bus.moving_to_hub = True
+                i = 0
+                while i < len(bus.passangers):
+                    # Успешная доставка пассажира
+                    if bus.passangers[i].destination == waypoint.waypoint_num:
+                        bus.passangers.remove(bus.passangers[i])
+                        i-=1
+                        money_earned += money_earned_per_passanger
+                        delivered_passanders_events.append(time_of_day)
+                        delivered_passanders += 1
+                    i+=1
+
+                i = 0
+                while i < len(waypoint.passangers):
                     if len(bus.passangers) < bus.bus_max_passangers:
-                        if passanger.destination < waypoint.waypoint_num and bus.moving_to_hub:
-                            bus.passangers.append(passanger)
-                            waypoint.passangers.remove(passanger)
-                        elif passanger.destination > waypoint.waypoint_num and (not bus.moving_to_hub):
-                            bus.passangers.append(passanger)
-                            waypoint.passangers.remove(passanger)
+                        if waypoint.passangers[i].destination < waypoint.waypoint_num and bus.moving_to_hub:
+                            bus.passangers.append(waypoint.passangers[i])
+                            waypoint.passangers.remove(waypoint.passangers[i])
+                            i-=1
+                        elif waypoint.passangers[i].destination > waypoint.waypoint_num and (not bus.moving_to_hub):
+                            bus.passangers.append(waypoint.passangers[i])
+                            waypoint.passangers.remove(waypoint.passangers[i])
+                            i-=1
+                    i+=1
 
                 # автобус продолжает движение
                 if bus.moving_to_hub:
@@ -150,12 +215,15 @@ def simulate():
             passanger.waiting_time += 1
             if passanger.waiting_time > passanger.max_waiting_time:
                 lost_passangers += 1
+                lost_passangers_events.append(time_of_day)
                 waypoint.passangers.remove(passanger)
 
         if spawn_passanger(rush_hour):
             spawned_passangers += 1
+            spawned_passangers_events.append(time_of_day)
             # генерируем пассажира с целью назначения
             waypoint.passangers.append(Passanger(get_random_destination(waypoint.waypoint_num)))
+
     time_of_day += 1
 
 
@@ -163,8 +231,69 @@ def start_day_simulation():
     for i in range(60 * 24):
         simulate()
 
-    print(f"delivered passangers: {delivered_passanders}/{spawned_passangers}")
-    print(f"money_earned:{money_earned}")
+    print(f"Успешно доставлено пассажиров: {delivered_passanders}/{spawned_passangers}")
+    print(f"Заработано денег с продажи билетов:{money_earned}")
+
+    print(f"Всего водителей:{main_hub.total_drivers}")
+    print(f"Потрачено денег на зарплаты водителям:{main_hub.total_drivers * DriverA.salary_per_day}")
+    print(f"Прибыль:{money_earned - main_hub.total_drivers * DriverA.salary_per_day}")
+
+    print(f"Всего автобусов: {main_hub.total_busses}")
+
+    print(f"Прибыль / число автобусов (показатель эффективности): {(money_earned - main_hub.total_drivers * DriverA.salary_per_day) / main_hub.total_busses}")
+
+    # анализ:
+    # График спавна пассажиров:
+    event_hours_spawn = [time // 60 for time in spawned_passangers_events]
+
+    event_data = [
+        spawned_passangers_events,
+        lost_passangers_events,
+        delivered_passanders_events,
+    ]
+    event_labels = [
+        "Появление пассажиров",
+        "Не дождавшиеся пассажиры",
+        "Успешно доставленные пассажиры"
+    ]
+
+
+    fig, axes = plt.subplots(len(event_data), 1, figsize=(6, len(event_data) * 4), sharex=True)
+
+    # Построение графиков
+    for i, (event_times, label) in enumerate(zip(event_data, event_labels)):
+        # Переводим минуты в часы
+        event_hours = [time // 60 for time in event_times]
+
+        # Подсчитываем количество событий по часам
+        hour_bins = np.arange(0, 25)
+        event_counts, _ = np.histogram(event_hours, bins=hour_bins)
+
+        # Построение графика
+        axes[i].bar(hour_bins[:-1], event_counts, width=1, edgecolor='black', align='edge')
+        axes[i].set_title(label)
+        axes[i].set_ylabel('Количество событий')
+        axes[i].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Настройка общей оси X
+    axes[-1].set_xlabel('Час дня')
+    plt.xticks(range(0, 24))  # Отображение всех часов на оси X
+
+    # Уменьшение расстояния между графиками
+    plt.tight_layout()
+
+    # Отображение окна с графиками
+    plt.show()
+
+
+
+    # График исчезающих пассажиров
+
+
+    # График успешно перевезённых пассажиров
+
+
+    ...
 
 
 start_day_simulation()

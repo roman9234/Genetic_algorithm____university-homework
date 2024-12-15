@@ -1,7 +1,7 @@
 class DriverA:
-    bus_max_passangers = 3
+    bus_max_passangers = 20
 
-    salary_per_week = 50_000 / 4
+    salary_per_day = 70_000 / 20
 
     max_work_time = 8 * 60
 
