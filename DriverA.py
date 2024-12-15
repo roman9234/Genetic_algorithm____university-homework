@@ -12,11 +12,13 @@ class DriverA:
     max_days_of_work = 5
     min_days_of_rest = 2
 
-    def __init__(self):
+    def __init__(self, time_of_work = 0, shift_start_time = 0, money_earned = 0):
+        self.money_earned = money_earned
+        self.shift_start_time = shift_start_time
         self.moving_to_hub = False
         self.passangers = []
         self.time_to_destination = 0
-        self.time_of_work = 0
+        self.time_of_work = time_of_work
         self.amount_of_rests = 0
 
     def __repr__(self):

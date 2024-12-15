@@ -84,20 +84,7 @@ class Hub:
         self.free_busses = 0
         self.total_drivers = 0
         # timetable содержит время запуска на маршрут новых водителей
-        # self.timetable = [0]
-        # self.timetable = [0, 4 * 60]
-        # self.timetable = [
-        #                       0,
-        #                       0 + 30,
-        #                       4 * 60,
-        #                       4 * 60 + 30,
-        #                       13 * 60,
-        #                       13 * 60 + 30,
-        #                       17 * 60,
-        #                       17 * 60 + 30,
-        #                   ]
-        self.timetable = [i for i in range(30, 24*60, 120)]
-        # self.timetable += [10]
+        self.timetable = []
 
 
 
@@ -106,17 +93,24 @@ spawned_passangers_events = []
 delivered_passanders_events = []
 lost_passangers_events = []
 
+results = {}
 
 def simulate():
-    global time_of_day, waypoints, lost_passangers, delivered_passanders, spawned_passangers, money_earned, main_hub
+    global time_of_day, waypoints, lost_passangers, delivered_passanders, spawned_passangers, money_earned, main_hub, results
 
+    # отображение состояния симуляции
     print(f"{time_of_day // 60}:{time_of_day % 60}")
     for waypoint in waypoints:
         print(waypoint.__repr__())
     print()
 
+    # проверка на час-пик
     rush_hour = check_rush_hour(time_of_day)
+
+    # симулирование каждой из путевых точек
     for waypoint in waypoints:
+
+        # Симулирование нулевого километра
         if waypoint.waypoint_num == 0:
 
             for resting_driver in waypoint.resting_drivers:
@@ -126,8 +120,9 @@ def simulate():
                     if main_hub.free_busses < 0:
                         main_hub.free_busses = 0
                         main_hub.total_busses += 1
-                    new_driver = DriverA()
-                    new_driver.time_of_work = resting_driver[1]
+
+                    # выход рабочего с отдыха
+                    new_driver = DriverA(resting_driver[1], resting_driver[2], resting_driver[3])
                     new_driver.amount_of_rests = 1
                     waypoint.resting_drivers.remove(resting_driver)
                     waypoint.busses_in_route.append(new_driver)
@@ -135,26 +130,29 @@ def simulate():
 
 
 
-            # логика для нулевого километра
+            # Запуск новых автобусов согласно расписанию. Водитель хранит информацию, во сколько вышел на смену впервые
             if time_of_day in main_hub.timetable:
                 main_hub.free_busses -= 1
                 if main_hub.free_busses < 0:
                     main_hub.free_busses = 0
                     main_hub.total_busses += 1
                 main_hub.total_drivers+=1
-                waypoint.busses_in_route.append(DriverA())
+                waypoint.busses_in_route.append(DriverA(shift_start_time = time_of_day))
 
+        # Расчёт автобусов на пути к остановке
         for bus in waypoint.busses_in_route:
             bus.time_of_work += 1
             if bus.time_to_destination > 0:
                 bus.time_to_destination -= 1
             else:
+
+                # Снова расчёт нулевого километра. Повторение нужно для избежания ошибок, в нём реализована другая логика.
                 if waypoint.waypoint_num == 0:
 
                     # Проверка что водителю пора на отдых
                     if bus.time_of_work >= bus.min_rest_interval and bus.amount_of_rests == 0:
                         main_hub.free_busses += 1
-                        waypoint.resting_drivers.append([bus.max_rest_time, bus.time_of_work])
+                        waypoint.resting_drivers.append([bus.max_rest_time, bus.time_of_work, bus.shift_start_time, bus.money_earned])
                         for passanger in bus.passangers:
                             waypoint.passangers.append(passanger)
                         waypoint.busses_in_route.remove(bus)
@@ -165,6 +163,7 @@ def simulate():
                         main_hub.free_busses += 1
                         for passanger in bus.passangers:
                             waypoint.passangers.append(passanger)
+                        results[bus.shift_start_time] = bus.money_earned
                         waypoint.busses_in_route.remove(bus)
                         break
 
@@ -173,18 +172,22 @@ def simulate():
                         bus.moving_to_hub = False
 
 
-
+                # Если автобус достиг конечной, он разворачивается
                 elif waypoint.waypoint_num == last_waypoint:
                     bus.moving_to_hub = True
                 i = 0
+
+                # Проверка, какие пассажиры выходят на этой остановке
                 while i < len(bus.passangers):
                     # Успешная доставка пассажира
                     if bus.passangers[i].destination == waypoint.waypoint_num:
                         bus.passangers.remove(bus.passangers[i])
                         i-=1
                         money_earned += money_earned_per_passanger
+                        bus.money_earned += money_earned_per_passanger
                         delivered_passanders_events.append(time_of_day)
                         delivered_passanders += 1
+                        results[bus.shift_start_time] = bus.money_earned
                     i+=1
 
                 i = 0
@@ -227,7 +230,25 @@ def simulate():
     time_of_day += 1
 
 
-def start_day_simulation():
+def genetic_solution():
+    while True:
+        input()
+
+
+
+
+
+
+        ...
+
+
+
+
+
+def simple_solution():
+
+    main_hub.timetable = [i for i in range(30, 24*60, 120)]
+
     for i in range(60 * 24):
         simulate()
 
@@ -241,6 +262,9 @@ def start_day_simulation():
     print(f"Всего автобусов: {main_hub.total_busses}")
 
     print(f"Прибыль / число автобусов (показатель эффективности): {(money_earned - main_hub.total_drivers * DriverA.salary_per_day) / main_hub.total_busses}")
+    results_sorted = {k: v for k, v in sorted(results.items(), key=lambda item: item[1],reverse=True)}
+    for key, value in results_sorted.items():
+        print(f"{key//60}:{key%60} заработал {value}")
 
     # анализ:
     # График спавна пассажиров:
@@ -283,7 +307,7 @@ def start_day_simulation():
     plt.tight_layout()
 
     # Отображение окна с графиками
-    plt.show()
+    # plt.show()
 
 
 
@@ -296,4 +320,4 @@ def start_day_simulation():
     ...
 
 
-start_day_simulation()
+simple_solution()
