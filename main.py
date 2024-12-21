@@ -37,8 +37,13 @@ first_rush_hour_end = 9 * 60
 second_rush_hour_start = 17 * 60
 second_rush_hour_end = 19 * 60
 
-usual_passanger_spawn = 0.3
-rush_hour_passanger_spawn = 0.7
+usual_passanger_spawn = 0.8
+rush_hour_passanger_spawn = 1
+
+
+time_between_waypoints = 5
+money_earned_per_passanger = 40
+money_for_bus_maintance = 7000
 
 
 def check_rush_hour(_time_of_day):
@@ -46,10 +51,7 @@ def check_rush_hour(_time_of_day):
         (second_rush_hour_start < _time_of_day < second_rush_hour_end)
 
 
-def spawn_passanger(_rush_hour):
-    if _rush_hour:
-        return random() < rush_hour_passanger_spawn
-    else:
+def spawn_passanger():
         return random() < usual_passanger_spawn
 
 
@@ -62,20 +64,42 @@ def get_random_destination(_current_waypoint):
     return choice(l)
 
 
-time_between_waypoints = 5
 
-money_earned_per_passanger = 40
 
-money_for_bus_maintance = 7000
-
+# Статистика
 spawned_passangers = 0
 delivered_passanders = 0
 lost_passangers = 0
 money_earned = 0
 
+spawned_passangers_events = []
+delivered_passanders_events = []
+lost_passangers_events = []
+
 waypoints = []
 for i in range(0, last_waypoint + 1):
     waypoints.append(Waypoint(i))
+
+
+def clear_simulation_data():
+    global spawned_passangers,delivered_passanders, lost_passangers, money_earned, waypoints, spawned_passangers_events, lost_passangers_events, delivered_passanders_events, time_of_day, main_hub, results
+
+    time_of_day = 0
+    main_hub = Hub()
+
+    results = {}
+
+    spawned_passangers = 0
+    delivered_passanders = 0
+    lost_passangers = 0
+    money_earned = 0
+    waypoints = []
+    spawned_passangers_events = []
+    delivered_passanders_events = []
+    lost_passangers_events = []
+    for i in range(0, last_waypoint + 1):
+        waypoints.append(Waypoint(i))
+
 
 
 class Hub:
@@ -89,20 +113,18 @@ class Hub:
 
 
 main_hub = Hub()
-spawned_passangers_events = []
-delivered_passanders_events = []
-lost_passangers_events = []
 
 results = {}
 
-def simulate():
+def simulate(print_status = True):
     global time_of_day, waypoints, lost_passangers, delivered_passanders, spawned_passangers, money_earned, main_hub, results
 
-    # отображение состояния симуляции
-    print(f"{time_of_day // 60}:{time_of_day % 60}")
-    for waypoint in waypoints:
-        print(waypoint.__repr__())
-    print()
+    if print_status:
+        # отображение состояния симуляции
+        print(f"{time_of_day // 60}:{time_of_day % 60}")
+        for waypoint in waypoints:
+            print(waypoint.__repr__())
+        print()
 
     # проверка на час-пик
     rush_hour = check_rush_hour(time_of_day)
@@ -221,25 +243,133 @@ def simulate():
                 lost_passangers_events.append(time_of_day)
                 waypoint.passangers.remove(passanger)
 
-        if spawn_passanger(rush_hour):
-            spawned_passangers += 1
-            spawned_passangers_events.append(time_of_day)
-            # генерируем пассажира с целью назначения
-            waypoint.passangers.append(Passanger(get_random_destination(waypoint.waypoint_num)))
+        if spawn_passanger():
+            if rush_hour:
+                spawned_passangers += 2
+                spawned_passangers_events.append(time_of_day)
+                spawned_passangers_events.append(time_of_day)
+                waypoint.passangers.append(Passanger(get_random_destination(waypoint.waypoint_num)))
+                waypoint.passangers.append(Passanger(get_random_destination(waypoint.waypoint_num)))
+            else:
+                # генерируем пассажира с целью назначения
+                spawned_passangers += 1
+                spawned_passangers_events.append(time_of_day)
+                waypoint.passangers.append(Passanger(get_random_destination(waypoint.waypoint_num)))
+
 
     time_of_day += 1
 
 
+def get_key(d, value):
+    for k, v in d.items():
+        if v == value:
+            return k
+
+more_data = False
+
+generations_to_draw_graph = 5000
+# generations_to_draw_graph = 1000
+max_added_points = 1
+max_removed_points = 1
+
+
+
 def genetic_solution():
+    global spawned_passangers, delivered_passanders, lost_passangers, money_earned
+
+    generation = 0
+
+    genetic_stat_effectiveness = []
+    genetic_stat_delivered_passangers = []
+    genetic_stat_drivers = []
+
+    current_timetable = [i for i in range(0, 24 * 60, 120)]
+
+
     while True:
-        input()
+        generation+=1
+        clear_simulation_data()
+        main_hub.timetable = current_timetable
+        for i in range(60 * 24):
+            simulate(print_status = False)
+
+        print(f"Успешно доставлено пассажиров: {delivered_passanders}/{spawned_passangers}")
+        if more_data:
+            print(f"Заработано денег с продажи билетов:{money_earned}")
+
+        print(f"Всего водителей:{main_hub.total_drivers}")
+        if more_data:
+            print(f"Потрачено денег на зарплаты водителям:{main_hub.total_drivers * DriverA.salary_per_day}")
+        print(f"Прибыль:{money_earned - main_hub.total_drivers * DriverA.salary_per_day}")
+
+        print(f"Всего автобусов: {main_hub.total_busses}")
+
+        # effectiveness = (money_earned - main_hub.total_drivers * DriverA.salary_per_day) / main_hub.total_busses
+        effectiveness = money_earned - main_hub.total_drivers * DriverA.salary_per_day
+
+        print(
+            f"Прибыль / число автобусов (показатель эффективности): {effectiveness}")
 
 
+        results_sorted = {k: v for k, v in sorted(results.items(), key=lambda item: item[1], reverse=True)}
+        average_income = sum(results.values())/len(results.values())
+        print(average_income)
+
+        for key, value in results_sorted.items():
+            print(f"{key // 60}:{key % 60} заработал {value}, это {round((value/average_income)*100,0)}% от среднего")
+            if value <= average_income*0.8:
+                current_timetable.remove(key)
+
+        current_timetable.append(randint(0, 60 * 24))
 
 
+        genetic_stat_effectiveness.append(effectiveness)
+        genetic_stat_delivered_passangers.append(delivered_passanders)
+        genetic_stat_drivers.append(main_hub.total_drivers)
+
+        # Статистика генетического алгоритма
+
+        event_data = [
+            genetic_stat_effectiveness,
+            genetic_stat_delivered_passangers,
+            genetic_stat_drivers,
+        ]
+        event_labels = [
+            "Эффективность расписания (прибыль = доходы - расходы)",
+            "Доставленные пассажиры",
+            "Число водителей"
+        ]
+
+        if generation % generations_to_draw_graph == 0:
+            # Создаем фигуру и оси для нескольких графиков
+            fig, axes = plt.subplots(len(event_data), 1, figsize=(6, len(event_data) * 4), sharex=True)
+
+            # Построение графиков
+            for i, (stat, label) in enumerate(zip(event_data, event_labels)):
+                # Генерируем значения для оси X (симуляции)
+                x_values = np.arange(len(stat))
+
+                # Построение графика
+                axes[i].plot(x_values, stat, marker='o', linestyle='-', color='blue')  # Линейный график с маркерами
+                axes[i].set_title(label)
+                axes[i].set_ylabel('Значение')
+                axes[i].grid(axis='y', linestyle='--', alpha=0.7)
+                axes[i].set_ylim(bottom=0)  # Устанавливаем нижнюю границу оси Y на 0
+                axes[i].set_ylim(top=(max(stat)*1.1))  # Устанавливаем нижнюю границу оси Y на 0
+
+            # Настройка общей оси X
+            axes[-1].set_xlabel('Симуляции')
+            plt.xticks(range(len(event_data[0])))  # Отображение всех симуляций на оси X
+
+            # Уменьшение расстояния между графиками
+            plt.tight_layout()
+
+            # Отображение графиков
+            plt.show()
+            if generation % generations_to_draw_graph == 0:
+                input("Нажмите Enter для нового шага симуляции")
 
 
-        ...
 
 
 
@@ -247,7 +377,7 @@ def genetic_solution():
 
 def simple_solution():
 
-    main_hub.timetable = [i for i in range(30, 24*60, 120)]
+    main_hub.timetable = [i for i in range(30, 24*60, 30)]
 
     for i in range(60 * 24):
         simulate()
@@ -298,26 +428,16 @@ def simple_solution():
         axes[i].set_title(label)
         axes[i].set_ylabel('Количество событий')
         axes[i].grid(axis='y', linestyle='--', alpha=0.7)
-
     # Настройка общей оси X
     axes[-1].set_xlabel('Час дня')
     plt.xticks(range(0, 24))  # Отображение всех часов на оси X
-
     # Уменьшение расстояния между графиками
     plt.tight_layout()
-
     # Отображение окна с графиками
-    # plt.show()
+    plt.show()
 
 
 
-    # График исчезающих пассажиров
 
-
-    # График успешно перевезённых пассажиров
-
-
-    ...
-
-
-simple_solution()
+# simple_solution()
+genetic_solution()

@@ -1,5 +1,5 @@
 class DriverA:
-    bus_max_passangers = 20
+    bus_max_passangers = 5
 
     salary_per_day = 70_000 / 20
 
@@ -9,7 +9,7 @@ class DriverA:
     max_rest_time = 1 * 60
     max_rests_per_day = 1
 
-    max_days_of_work = 5
+    max_days_of_work = 1
     min_days_of_rest = 2
 
     def __init__(self, time_of_work = 0, shift_start_time = 0, money_earned = 0):
@@ -23,3 +23,5 @@ class DriverA:
 
     def __repr__(self):
         return f"t:{self.time_to_destination}|p:{len(self.passangers)}"
+
+
